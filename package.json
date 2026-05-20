@@ -9,9 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "liquid-sdk": "^1.7.4",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "swr": "^2.4.1",
+    "viem": "^2.50.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
