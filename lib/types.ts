@@ -6,11 +6,10 @@ export interface TokenInfo {
   hook: string;
   rewardRecipient: string;
   creator: string;
-  deployTimestamp: bigint;
+  deployTimestamp: string;
   supply: string;
   metadata: string;
   context: string;
-  rewards: string;
   extensions: string[];
 }
 
@@ -20,7 +19,7 @@ export interface TokenListItem {
   symbol: string;
   image: string;
   creator: string;
-  deployTimestamp: bigint;
+  deployTimestamp: string;
 }
 
 export interface TokenPrice {
@@ -37,6 +36,12 @@ export interface AuctionState {
   currentFee: number;
   nextBlock: number;
   status: "active" | "ended" | "upcoming";
+}
+
+export interface AuctionDetail extends AuctionState {
+  feeConfig: AuctionFeeConfig;
+  decayStartTime: number | null;
+  unlockTime: number | null;
 }
 
 export interface AuctionFeeConfig {

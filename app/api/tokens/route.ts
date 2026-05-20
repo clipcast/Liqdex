@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPublicClient, ADDRESSES, FACTORY_ABI } from "@/lib/liquid";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { LiquidSDK } from "liquid-sdk";
 import { getCached, setCache } from "@/lib/cache";
 import type { TokenListItem, PaginatedResponse } from "@/lib/types";
 
-const DEPLOY_BLOCK = 29000000;
-const CHUNK_SIZE = 10000;
+const DEPLOY_BLOCK = BigInt(44445000);
+const CHUNK_SIZE = BigInt(100000);
 const CACHE_TTL = 60 * 1000; // 1 minute
+
+function createSDK() {
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
+  });
+  return new LiquidSDK({ publicClient });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,49 +32,56 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    const client = getPublicClient();
-    const currentBlock = await client.getBlockNumber();
+    const sdk = createSDK();
+    const publicClient = createPublicClient({
+      chain: base,
+      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
+    });
+    const currentBlock = await publicClient.getBlockNumber();
 
-    const allTokens: TokenListItem[] = [];
+    // Fetch tokens using SDK's event-based approach in chunks
+    const allTokens: (TokenListItem & { _block: bigint })[] = [];
     let fromBlock = DEPLOY_BLOCK;
 
-    while (fromBlock < Number(currentBlock)) {
-      const toBlock = Math.min(fromBlock + CHUNK_SIZE, Number(currentBlock));
+    while (fromBlock < currentBlock) {
+      const toBlock =
+        fromBlock + CHUNK_SIZE > currentBlock
+          ? currentBlock
+          : fromBlock + CHUNK_SIZE;
 
       try {
-        const tokens = await client.readContract({
-          address: ADDRESSES.FACTORY as `0x${string}`,
-          abi: FACTORY_ABI,
-          functionName: "getTokens",
-          args: [BigInt(fromBlock), BigInt(toBlock)],
-        });
-
-        if (tokens && Array.isArray(tokens)) {
-          for (const token of tokens) {
-            allTokens.push({
-              address: token.poolId,
-              name: token.name,
-              symbol: token.symbol,
-              image: token.image,
-              creator: token.creator,
-              deployTimestamp: token.deployTimestamp,
-            });
-          }
+        const tokens = await sdk.getTokens({ fromBlock, toBlock });
+        for (const token of tokens) {
+          const block = token.blockNumber ?? BigInt(0);
+          allTokens.push({
+            address: token.tokenAddress,
+            name: token.tokenName,
+            symbol: token.tokenSymbol,
+            image: token.tokenImage,
+            creator: token.msgSender,
+            deployTimestamp: block.toString(),
+            _block: block,
+          });
         }
       } catch (error) {
-        console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
+        console.error(
+          `Error reading blocks ${fromBlock}-${toBlock}:`,
+          error
+        );
       }
 
-      fromBlock = toBlock + 1;
+      fromBlock = toBlock + BigInt(1);
     }
 
-    // Sort by deploy timestamp (newest first)
-    allTokens.sort((a, b) => Number(b.deployTimestamp - a.deployTimestamp));
+    // Sort by block number (newest first)
+    allTokens.sort((a, b) => Number(b._block - a._block));
 
     // Paginate
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    const paginatedTokens = allTokens.slice(startIndex, endIndex);
+    const paginatedTokens = allTokens.slice(startIndex, endIndex).map(
+      ({ _block, ...rest }) => rest
+    );
 
     const response: PaginatedResponse<TokenListItem> = {
       data: paginatedTokens,

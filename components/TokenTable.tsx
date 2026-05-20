@@ -8,18 +8,19 @@ interface TokenTableProps {
   isLoading?: boolean;
 }
 
-function formatTimestamp(timestamp: bigint): string {
-  const date = new Date(Number(timestamp) * 1000);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+function formatBlockAge(blockNumber: string): string {
+  const block = parseInt(blockNumber);
+  if (isNaN(block)) return blockNumber;
+  // Approximate age: Base block time ~2s, current block ~54M
+  const approxCurrentBlock = 54_000_000;
+  const ageSeconds = (approxCurrentBlock - block) * 2;
+  const minutes = Math.floor(ageSeconds / 60);
+  const hours = Math.floor(ageSeconds / 3600);
+  const days = Math.floor(ageSeconds / 86400);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return "just now";
 }
 
 export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
@@ -103,7 +104,7 @@ export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-400">
-                    {formatTimestamp(token.deployTimestamp)}
+                    {formatBlockAge(token.deployTimestamp)}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">

@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPublicClient, ADDRESSES, FACTORY_ABI } from "@/lib/liquid";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { LiquidSDK } from "liquid-sdk";
 import { getCached, setCache } from "@/lib/cache";
-import { getTokenPrice } from "@/lib/geckoterminal";
-import type { TokenInfo, TokenPrice } from "@/lib/types";
+import type { TokenInfo } from "@/lib/types";
 
 const CACHE_TTL = 30 * 1000; // 30 seconds
+
+function createSDK() {
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
+  });
+  return new LiquidSDK({ publicClient });
+}
 
 export async function GET(
   request: NextRequest,
@@ -26,38 +35,38 @@ export async function GET(
       return NextResponse.json(cached);
     }
 
-    const client = getPublicClient();
+    const sdk = createSDK();
 
-    // Get token info from factory
-    const tokenEvent = await client.readContract({
-      address: ADDRESSES.FACTORY as `0x${string}`,
-      abi: FACTORY_ABI,
-      functionName: "getTokenEvent",
-      args: [addr as `0x${string}`],
-    });
+    // Get token event from SDK (uses indexed event log — O(1))
+    const tokenEvent = await sdk.getTokenEvent(addr as `0x${string}`);
 
     if (!tokenEvent) {
       return NextResponse.json({ error: "Token not found" }, { status: 404 });
     }
 
-    const tokenInfo: TokenInfo = {
-      name: tokenEvent.name,
-      symbol: tokenEvent.symbol,
-      image: tokenEvent.image,
+    // Get additional info
+    const [tokenInfo, rewards] = await Promise.all([
+      sdk.getTokenInfo(addr as `0x${string}`),
+      sdk.getTokenRewards(addr as `0x${string}`).catch(() => null),
+    ]);
+
+    const tokenResult = {
+      name: tokenEvent.tokenName,
+      symbol: tokenEvent.tokenSymbol,
+      image: tokenEvent.tokenImage,
       poolId: tokenEvent.poolId,
-      hook: tokenEvent.hook,
-      rewardRecipient: tokenEvent.rewardRecipient,
-      creator: tokenEvent.creator,
-      deployTimestamp: tokenEvent.deployTimestamp,
-      supply: tokenEvent.supply.toString(),
-      metadata: tokenEvent.metadata,
-      context: tokenEvent.context,
-      rewards: tokenEvent.rewards,
-      extensions: [],
+      hook: tokenEvent.poolHook,
+      rewardRecipient: rewards?.rewardRecipients?.[0] ?? "",
+      creator: tokenEvent.msgSender,
+      deployTimestamp: (tokenEvent.blockNumber ?? BigInt(0)).toString(),
+      supply: tokenInfo.totalSupply.toString(),
+      metadata: tokenEvent.tokenMetadata,
+      context: tokenEvent.tokenContext,
+      extensions: tokenEvent.extensions,
     };
 
-    setCache(cacheKey, tokenInfo);
-    return NextResponse.json(tokenInfo);
+    setCache(cacheKey, tokenResult);
+    return NextResponse.json(tokenResult);
   } catch (error) {
     console.error("Token detail API error:", error);
     return NextResponse.json(

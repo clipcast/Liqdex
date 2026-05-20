@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPublicClient, ADDRESSES, FACTORY_ABI, AUCTION_ABI } from "@/lib/liquid";
+import { createPublicClient, http } from "viem";
+import { base } from "viem/chains";
+import { LiquidSDK } from "liquid-sdk";
 import { getCached, setCache } from "@/lib/cache";
 import type { AuctionState } from "@/lib/types";
+import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
 
 const CACHE_TTL = 5 * 1000; // 5 seconds for real-time data
+const DEPLOY_BLOCK = BigInt(44445000);
+const CHUNK_SIZE = BigInt(100000);
+
+function createSDK() {
+  const publicClient = createPublicClient({
+    chain: base,
+    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
+  });
+  return new LiquidSDK({ publicClient });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,40 +26,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    const client = getPublicClient();
-    const currentBlock = await client.getBlockNumber();
+    const sdk = createSDK();
+    const publicClient = createPublicClient({
+      chain: base,
+      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
+    });
+    const currentBlock = await publicClient.getBlockNumber();
 
-    // Get recent tokens to check for auctions
-    const DEPLOY_BLOCK = 29000000;
-    const CHUNK_SIZE = 10000;
+    // Get tokens using SDK (event-based, fast)
     const allTokens: { poolId: string; name: string; symbol: string }[] = [];
-
     let fromBlock = DEPLOY_BLOCK;
-    while (fromBlock < Number(currentBlock)) {
-      const toBlock = Math.min(fromBlock + CHUNK_SIZE, Number(currentBlock));
+
+    while (fromBlock < currentBlock) {
+      const toBlock =
+        fromBlock + CHUNK_SIZE > currentBlock
+          ? currentBlock
+          : fromBlock + CHUNK_SIZE;
 
       try {
-        const tokens = await client.readContract({
-          address: ADDRESSES.FACTORY as `0x${string}`,
-          abi: FACTORY_ABI,
-          functionName: "getTokens",
-          args: [BigInt(fromBlock), BigInt(toBlock)],
-        });
-
-        if (tokens && Array.isArray(tokens)) {
-          for (const token of tokens) {
-            allTokens.push({
-              poolId: token.poolId,
-              name: token.name,
-              symbol: token.symbol,
-            });
-          }
+        const tokens = await sdk.getTokens({ fromBlock, toBlock });
+        for (const token of tokens) {
+          allTokens.push({
+            poolId: token.poolId,
+            name: token.tokenName,
+            symbol: token.tokenSymbol,
+          });
         }
       } catch (error) {
         console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
       }
 
-      fromBlock = toBlock + 1;
+      fromBlock = toBlock + BigInt(1);
     }
 
     // Check auction state for recent tokens (last 100)
@@ -55,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     for (const token of recentTokens) {
       try {
-        const result = await client.readContract({
+        const result = await publicClient.readContract({
           address: ADDRESSES.SNIPER_AUCTION as `0x${string}`,
           abi: AUCTION_ABI,
           functionName: "getAuctionState",

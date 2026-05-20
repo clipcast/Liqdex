@@ -4,6 +4,7 @@ import type {
   TokenInfo,
   TokenPrice,
   AuctionState,
+  AuctionDetail,
   PaginatedResponse,
 } from "./types";
 
@@ -71,7 +72,7 @@ export function useAuctions() {
 }
 
 export function useAuctionDetail(poolId: string | undefined) {
-  const { data, error, isLoading, mutate } = useSWR<AuctionState>(
+  const { data, error, isLoading, mutate } = useSWR<AuctionDetail>(
     poolId ? `/api/auctions/${poolId}` : null,
     fetcher,
     { refreshInterval: 3000 }
