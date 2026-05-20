@@ -8,15 +8,33 @@ interface TokenTableProps {
   isLoading?: boolean;
 }
 
-function formatBlockAge(blockNumber: string): string {
-  const block = parseInt(blockNumber);
-  if (isNaN(block)) return blockNumber;
-  // Approximate age: Base block time ~2s, current block ~54M
-  const approxCurrentBlock = 54_000_000;
-  const ageSeconds = (approxCurrentBlock - block) * 2;
-  const minutes = Math.floor(ageSeconds / 60);
-  const hours = Math.floor(ageSeconds / 3600);
-  const days = Math.floor(ageSeconds / 86400);
+function formatAge(timestampStr: string): string {
+  const timestamp = parseInt(timestampStr);
+  if (isNaN(timestamp)) return timestampStr;
+
+  // Check if it's a Unix timestamp (seconds since epoch) or block number
+  // Unix timestamps for 2024+ are > 1.7 billion
+  // Block numbers on Base are ~54 million
+  if (timestamp < 1_000_000_000) {
+    // It's likely a block number, use approximation
+    const approxCurrentBlock = 54_000_000;
+    const ageSeconds = (approxCurrentBlock - timestamp) * 2;
+    const minutes = Math.floor(ageSeconds / 60);
+    const hours = Math.floor(ageSeconds / 3600);
+    const days = Math.floor(ageSeconds / 86400);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return "just now";
+  }
+
+  // It's a Unix timestamp
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - timestamp;
+
+  const minutes = Math.floor(diff / 60);
+  const hours = Math.floor(diff / 3600);
+  const days = Math.floor(diff / 86400);
   if (days > 0) return `${days}d ago`;
   if (hours > 0) return `${hours}h ago`;
   if (minutes > 0) return `${minutes}m ago`;
@@ -59,11 +77,8 @@ export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Creator
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Age
-              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Actions
+                Age
               </th>
             </tr>
           </thead>
@@ -74,7 +89,10 @@ export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
                 className="hover:bg-gray-750 transition-colors"
               >
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
+                  <Link
+                    href={`/tokens/${token.address}`}
+                    className="flex items-center hover:text-blue-400"
+                  >
                     {token.image && (
                       <img
                         src={token.image}
@@ -82,15 +100,10 @@ export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
                         className="w-8 h-8 rounded-full mr-3"
                       />
                     )}
-                    <div>
-                      <div className="text-sm font-medium text-white">
-                        {token.name}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {token.address.slice(0, 6)}...{token.address.slice(-4)}
-                      </div>
-                    </div>
-                  </div>
+                    <span className="text-sm font-medium text-white">
+                      {token.name}
+                    </span>
+                  </Link>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm text-gray-300 bg-gray-700 px-2 py-1 rounded">
@@ -98,22 +111,14 @@ export default function TokenTable({ tokens, isLoading }: TokenTableProps) {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-400">
+                  <span className="text-sm text-gray-400 font-mono">
                     {token.creator.slice(0, 6)}...{token.creator.slice(-4)}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm text-gray-400">
-                    {formatBlockAge(token.deployTimestamp)}
-                  </span>
-                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <Link
-                    href={`/tokens/${token.address}`}
-                    className="text-blue-400 hover:text-blue-300 text-sm font-medium"
-                  >
-                    View →
-                  </Link>
+                  <span className="text-sm text-gray-400">
+                    {formatAge(token.deployTimestamp)}
+                  </span>
                 </td>
               </tr>
             ))}

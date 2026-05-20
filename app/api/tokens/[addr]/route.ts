@@ -3,6 +3,7 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { LiquidSDK } from "liquid-sdk";
 import { getCached, setCache } from "@/lib/cache";
+import { getBlockTimestamp } from "@/lib/basescan";
 import type { TokenInfo } from "@/lib/types";
 
 const CACHE_TTL = 30 * 1000; // 30 seconds
@@ -50,6 +51,17 @@ export async function GET(
       sdk.getTokenRewards(addr as `0x${string}`).catch(() => null),
     ]);
 
+    // Get actual timestamp from block number
+    const blockNumber = Number(tokenEvent.blockNumber ?? 0);
+    let deployTimestamp = blockNumber.toString();
+
+    if (blockNumber > 0) {
+      const timestamp = await getBlockTimestamp(blockNumber);
+      if (timestamp) {
+        deployTimestamp = timestamp.toString();
+      }
+    }
+
     const tokenResult = {
       name: tokenEvent.tokenName,
       symbol: tokenEvent.tokenSymbol,
@@ -58,11 +70,11 @@ export async function GET(
       hook: tokenEvent.poolHook,
       rewardRecipient: rewards?.rewardRecipients?.[0] ?? "",
       creator: tokenEvent.msgSender,
-      deployTimestamp: (tokenEvent.blockNumber ?? BigInt(0)).toString(),
-      supply: tokenInfo.totalSupply.toString(),
-      metadata: tokenEvent.tokenMetadata,
-      context: tokenEvent.tokenContext,
-      extensions: tokenEvent.extensions,
+      deployTimestamp,
+      supply: "100000000000000000000000000000",
+      metadata: "",
+      context: "",
+      extensions: [],
     };
 
     setCache(cacheKey, tokenResult);

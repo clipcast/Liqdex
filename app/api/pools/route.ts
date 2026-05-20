@@ -7,7 +7,7 @@ import { getTokenPrice } from "@/lib/geckoterminal";
 import type { PoolListItem } from "@/lib/types";
 
 const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(44445000);
+const DEPLOY_BLOCK = BigInt(44445784);
 const CHUNK_SIZE = BigInt(100000);
 const BATCH_SIZE = 5;
 const BATCH_DELAY = 2000;

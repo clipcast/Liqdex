@@ -7,7 +7,7 @@ import { getTokenPrice } from "@/lib/geckoterminal";
 import type { TopVolumeToken } from "@/lib/types";
 
 const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(44445000);
+const DEPLOY_BLOCK = BigInt(44445784);
 const CHUNK_SIZE = BigInt(100000);
 const BATCH_SIZE = 5; // GeckoTerminal requests per batch
 const BATCH_DELAY = 2000; // 2s between batches to respect rate limit

@@ -7,7 +7,7 @@ import type { AuctionState } from "@/lib/types";
 import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
 
 const CACHE_TTL = 5 * 1000; // 5 seconds for real-time data
-const DEPLOY_BLOCK = BigInt(44445000);
+const DEPLOY_BLOCK = BigInt(44445784);
 const CHUNK_SIZE = BigInt(100000);
 
 function createSDK() {
@@ -59,11 +59,10 @@ export async function GET(request: NextRequest) {
       fromBlock = toBlock + BigInt(1);
     }
 
-    // Check auction state for recent tokens (last 100)
-    const recentTokens = allTokens.slice(-100);
+    // Check auction state for each token's pool
     const auctions: AuctionState[] = [];
 
-    for (const token of recentTokens) {
+    for (const token of allTokens) {
       try {
         const result = await publicClient.readContract({
           address: ADDRESSES.SNIPER_AUCTION as `0x${string}`,
@@ -86,17 +85,17 @@ export async function GET(request: NextRequest) {
           auctions.push({
             round: Number(round),
             gasPeg,
-            currentFee: Number(currentFee) / 10000,
+            currentFee: Number(currentFee) / 10000, // Convert from basis points
             nextBlock: Number(nextBlock),
-            status: isActive ? "active" : "ended",
+            status: isActive ? "active" : isEnded ? "ended" : "upcoming",
           });
         }
       } catch {
-        // Skip tokens without auction
+        // Skip tokens without auction data
       }
     }
 
-    // Sort by status (active first), then by round
+    // Sort by status (active first, then ended)
     auctions.sort((a, b) => {
       if (a.status === "active" && b.status !== "active") return -1;
       if (a.status !== "active" && b.status === "active") return 1;

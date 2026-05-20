@@ -87,9 +87,12 @@ export default function TokenDetailPage({
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-gray-400">Deployed at Block</dt>
-              <dd className="text-white font-mono text-sm">
-                #{Number(token.deployTimestamp).toLocaleString()}
+              <dt className="text-gray-400">Deployed</dt>
+              <dd className="text-white text-sm">
+                {Number(token.deployTimestamp) > 1_000_000_000
+                  ? new Date(Number(token.deployTimestamp) * 1000).toLocaleString()
+                  : `Block #${Number(token.deployTimestamp).toLocaleString()}`
+                }
               </dd>
             </div>
           </dl>

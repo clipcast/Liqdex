@@ -3,9 +3,10 @@ import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
 import { LiquidSDK } from "liquid-sdk";
 import { getCached, setCache } from "@/lib/cache";
+import { getBlockTimestamp } from "@/lib/basescan";
 import type { TokenListItem, PaginatedResponse } from "@/lib/types";
 
-const DEPLOY_BLOCK = BigInt(44445000);
+const DEPLOY_BLOCK = BigInt(44445784);
 const CHUNK_SIZE = BigInt(100000);
 const CACHE_TTL = 60 * 1000; // 1 minute
 
@@ -76,23 +77,38 @@ export async function GET(request: NextRequest) {
     // Sort by block number (newest first)
     allTokens.sort((a, b) => Number(b._block - a._block));
 
+    // Get timestamp for the first token's block (as reference)
+    const firstBlock = allTokens.length > 0 ? Number(allTokens[0]._block) : Number(currentBlock);
+    const currentTimestamp = await getBlockTimestamp(Number(currentBlock));
+    const firstTimestamp = await getBlockTimestamp(firstBlock);
+
+    // Convert block numbers to timestamps
+    if (currentTimestamp && firstTimestamp) {
+      for (const token of allTokens) {
+        const blockDiff = Number(currentBlock) - Number(token._block);
+        const timestamp = currentTimestamp - (blockDiff * 2);
+        token.deployTimestamp = timestamp.toString();
+      }
+    }
+
     // Paginate
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    const paginatedTokens = allTokens.slice(startIndex, endIndex).map(
-      ({ _block, ...rest }) => rest
-    );
+    const paginatedTokens = allTokens.slice(startIndex, endIndex);
 
-    const response: PaginatedResponse<TokenListItem> = {
-      data: paginatedTokens,
+    // Remove _block from response
+    const responseData = paginatedTokens.map(({ _block, ...rest }) => rest);
+
+    const result: PaginatedResponse<TokenListItem> = {
+      data: responseData,
       total: allTokens.length,
       page,
       pageSize,
       hasMore: endIndex < allTokens.length,
     };
 
-    setCache(cacheKey, response);
-    return NextResponse.json(response);
+    setCache(cacheKey, result);
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Tokens API error:", error);
     return NextResponse.json(
