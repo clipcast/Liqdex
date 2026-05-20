@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Liqdex
+
+Liquid Protocol DEX Scanner + Sniper Auction Monitor
+
+## Overview
+
+One-stop platform untuk monitoring ekosistem Liquid Protocol di Base chain:
+
+- **DEX Scanner** — Monitor semua token: harga, volume, market cap, pool info
+- **Sniper Auction Monitor** — Track auction real-time: fee descending, status, countdown
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS (dark theme)
+- viem + liquid-sdk
+- GeckoTerminal API (price data)
+- Base chain (8453)
+
+## Features
+
+### Dashboard
+- Stats overview (total tokens, volume, liquidity, active auctions)
+- Recent tokens list
+- Quick links to all sections
+
+### Token Scanner
+- Paginated token list with search
+- Token detail page with full info
+- Deploy timestamp and creator info
+
+### Sniper Auction Monitor
+- Real-time auction status (active/ended/upcoming)
+- Descending fee visualization
+- Fee configuration details
+- Decay timing info
+
+### Pools
+- All Uniswap V4 pools from Liquid Protocol
+- Pool ID and hook info
+
+### Contracts
+- All 19 Liquid Protocol contracts
+- Categorized by type (Core, Hooks, Extensions, MEV Modules)
+- BaseScan links
+
+## Project Structure
+
+```
+/app
+  /                    → Dashboard
+  /tokens              → Token list
+  /tokens/[address]    → Token detail
+  /top-volume          → Top volume tokens
+  /pools               → Uniswap V4 pools
+  /auctions            → Sniper auction monitor
+  /auctions/[addr]     → Auction detail
+  /contracts           → All contracts
+
+/lib
+  /liquid.ts           → SDK singleton (server-side)
+  /geckoterminal.ts    → GeckoTerminal price API
+  /cache.ts            → File-based cache
+  /auction.ts          → Auction data fetcher
+  /hooks.ts            → SWR hooks
+  /types.ts            → TypeScript types
+
+/components
+  /Navbar.tsx          → Navigation sidebar
+  /StatsCard.tsx       → Dashboard stats card
+  /TokenTable.tsx      → Token list table
+  /AuctionCard.tsx     → Auction status card
+  /Loading.tsx         → Loading spinner
+  /ErrorBoundary.tsx   → Error handling
+
+/app/api
+  /tokens/route.ts     → GET: paginated token list
+  /tokens/[addr]       → GET: single token detail
+  /auctions/route.ts   → GET: active auctions
+  /auctions/[addr]     → GET: auction detail
+  /stats/route.ts      → GET: dashboard stats
+```
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+BASE_RPC_URL=https://mainnet.base.org  # Optional, defaults to public RPC
+```
 
-## Learn More
+## Status
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+🚧 Under development
