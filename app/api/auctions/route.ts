@@ -7,7 +7,7 @@ import type { AuctionState } from "@/lib/types";
 import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
 
 const CACHE_TTL = 5 * 1000; // 5 seconds for real-time data
-const DEPLOY_BLOCK = BigInt(44445784);
+const DEPLOY_BLOCK = BigInt(43327823);
 const CHUNK_SIZE = BigInt(100000);
 
 function createSDK() {

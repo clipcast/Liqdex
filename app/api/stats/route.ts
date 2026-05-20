@@ -8,7 +8,7 @@ import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
 import type { DashboardStats } from "@/lib/types";
 
 const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(44445784);
+const DEPLOY_BLOCK = BigInt(43327823);
 const CHUNK_SIZE = BigInt(100000);
 const SAMPLE_SIZE = 10;
 

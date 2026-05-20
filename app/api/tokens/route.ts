@@ -6,7 +6,7 @@ import { getCached, setCache } from "@/lib/cache";
 import { getBlockTimestamp } from "@/lib/basescan";
 import type { TokenListItem, PaginatedResponse } from "@/lib/types";
 
-const DEPLOY_BLOCK = BigInt(44445784);
+const DEPLOY_BLOCK = BigInt(43327823);
 const CHUNK_SIZE = BigInt(100000);
 const CACHE_TTL = 60 * 1000; // 1 minute
 
