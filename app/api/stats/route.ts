@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { LiquidSDK } from "liquid-sdk";
+import { scanAllTokens, getPublicClient } from "@/lib/scanner";
 import { getCached, setCache } from "@/lib/cache";
 import { getTokenPrice } from "@/lib/geckoterminal";
 import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
 import type { DashboardStats } from "@/lib/types";
 
-const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(43327823);
-const CHUNK_SIZE = BigInt(100000);
-const SAMPLE_SIZE = 10;
-
-function createSDK() {
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-  });
-  return new LiquidSDK({ publicClient });
-}
+const CACHE_TTL = 5 * 60 * 1000;
+const SAMPLE_SIZE = 5;
 
 export async function GET() {
   try {
@@ -28,42 +16,14 @@ export async function GET() {
       return NextResponse.json(cached);
     }
 
-    const sdk = createSDK();
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-    });
+    const allTokens = await scanAllTokens();
+    const publicClient = getPublicClient();
     const currentBlock = await publicClient.getBlockNumber();
-
-    // Scan all tokens
-    const allTokens: { poolId: string; address: string }[] = [];
-    let fromBlock = DEPLOY_BLOCK;
-
-    while (fromBlock < currentBlock) {
-      const toBlock =
-        fromBlock + CHUNK_SIZE > currentBlock
-          ? currentBlock
-          : fromBlock + CHUNK_SIZE;
-
-      try {
-        const tokens = await sdk.getTokens({ fromBlock, toBlock });
-        for (const token of tokens) {
-          allTokens.push({
-            poolId: token.poolId,
-            address: token.tokenAddress,
-          });
-        }
-      } catch (error) {
-        console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
-      }
-
-      fromBlock = toBlock + BigInt(1);
-    }
 
     const totalTokens = allTokens.length;
 
     // Sample recent tokens for volume/liquidity
-    const sampleTokens = allTokens.slice(-SAMPLE_SIZE);
+    const sampleTokens = allTokens.slice(0, SAMPLE_SIZE);
     let totalVolume = 0;
     let totalLiquidity = 0;
     let sampleCount = 0;
@@ -77,18 +37,17 @@ export async function GET() {
           sampleCount++;
         }
       } catch {
-        // Skip failed price fetches
+        // Skip
       }
     }
 
-    // Extrapolate if we have sample data
     const avgVolume = sampleCount > 0 ? totalVolume / sampleCount : 0;
     const avgLiquidity = sampleCount > 0 ? totalLiquidity / sampleCount : 0;
     const estimatedVolume = Math.round(avgVolume * totalTokens);
     const estimatedLiquidity = Math.round(avgLiquidity * totalTokens);
 
-    // Count active auctions from recent tokens (last 50)
-    const recentTokens = allTokens.slice(-50);
+    // Count active auctions (last 20 tokens)
+    const recentTokens = allTokens.slice(0, 20);
     let activeAuctions = 0;
 
     for (const token of recentTokens) {
@@ -105,7 +64,7 @@ export async function GET() {
           activeAuctions++;
         }
       } catch {
-        // Skip tokens without auction
+        // Skip
       }
     }
 
@@ -116,7 +75,7 @@ export async function GET() {
       activeAuctions,
     };
 
-    setCache(cacheKey, stats);
+    setCache(cacheKey, stats, CACHE_TTL);
     return NextResponse.json(stats);
   } catch (error) {
     console.error("Stats API error:", error);

@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { LiquidSDK } from "liquid-sdk";
+import { scanAllTokens } from "@/lib/scanner";
 import { getCached, setCache } from "@/lib/cache";
 import { getTokenPrice } from "@/lib/geckoterminal";
 import type { PoolListItem } from "@/lib/types";
 
-const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(43327823);
-const CHUNK_SIZE = BigInt(100000);
+const CACHE_TTL = 5 * 60 * 1000;
 const BATCH_SIZE = 5;
 const BATCH_DELAY = 2000;
-
-function createSDK() {
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-  });
-  return new LiquidSDK({ publicClient });
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,53 +20,7 @@ export async function GET() {
       return NextResponse.json(cached);
     }
 
-    const sdk = createSDK();
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-    });
-    const currentBlock = await publicClient.getBlockNumber();
-
-    // Scan all tokens (each has a poolId)
-    const allTokens: {
-      address: string;
-      name: string;
-      symbol: string;
-      image: string;
-      poolId: string;
-      hook: string;
-      creator: string;
-      deployTimestamp: string;
-    }[] = [];
-
-    let fromBlock = DEPLOY_BLOCK;
-    while (fromBlock < currentBlock) {
-      const toBlock =
-        fromBlock + CHUNK_SIZE > currentBlock
-          ? currentBlock
-          : fromBlock + CHUNK_SIZE;
-
-      try {
-        const tokens = await sdk.getTokens({ fromBlock, toBlock });
-        for (const token of tokens) {
-          const block = token.blockNumber ?? BigInt(0);
-          allTokens.push({
-            address: token.tokenAddress,
-            name: token.tokenName,
-            symbol: token.tokenSymbol,
-            image: token.tokenImage,
-            poolId: token.poolId,
-            hook: token.poolHook,
-            creator: token.msgSender,
-            deployTimestamp: block.toString(),
-          });
-        }
-      } catch (error) {
-        console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
-      }
-
-      fromBlock = toBlock + BigInt(1);
-    }
+    const allTokens = await scanAllTokens();
 
     // Fetch price/volume data from GeckoTerminal in batches
     const poolsWithPrice: PoolListItem[] = [];
@@ -96,7 +38,14 @@ export async function GET() {
           result.status === "fulfilled" && result.value ? result.value : null;
 
         poolsWithPrice.push({
-          ...token,
+          address: token.address,
+          name: token.name,
+          symbol: token.symbol,
+          image: token.image,
+          poolId: token.poolId,
+          hook: token.hook,
+          creator: token.creator,
+          deployTimestamp: token.blockNumber.toString(),
           liquidity: price?.liquidity ?? 0,
           volume24h: price?.volume24h ?? 0,
           priceChange24h: price?.priceChange24h ?? 0,
@@ -111,7 +60,7 @@ export async function GET() {
     // Sort by liquidity descending
     poolsWithPrice.sort((a, b) => b.liquidity - a.liquidity);
 
-    setCache(cacheKey, poolsWithPrice);
+    setCache(cacheKey, poolsWithPrice, CACHE_TTL);
     return NextResponse.json(poolsWithPrice);
   } catch (error) {
     console.error("Pools API error:", error);

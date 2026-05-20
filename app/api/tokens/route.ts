@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { LiquidSDK } from "liquid-sdk";
-import { getCached, setCache } from "@/lib/cache";
+import { scanAllTokens, getPublicClient } from "@/lib/scanner";
 import { getBlockTimestamp } from "@/lib/basescan";
+import { getCached, setCache } from "@/lib/cache";
 import type { TokenListItem, PaginatedResponse } from "@/lib/types";
 
-const DEPLOY_BLOCK = BigInt(43327823);
-const CHUNK_SIZE = BigInt(100000);
-const CACHE_TTL = 60 * 1000; // 1 minute
-
-function createSDK() {
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-  });
-  return new LiquidSDK({ publicClient });
-}
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,81 +21,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    const sdk = createSDK();
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-    });
+    const allTokens = await scanAllTokens();
+    const publicClient = getPublicClient();
     const currentBlock = await publicClient.getBlockNumber();
 
-    // Fetch tokens using SDK's event-based approach in chunks
-    const allTokens: (TokenListItem & { _block: bigint })[] = [];
-    let fromBlock = DEPLOY_BLOCK;
-
-    while (fromBlock < currentBlock) {
-      const toBlock =
-        fromBlock + CHUNK_SIZE > currentBlock
-          ? currentBlock
-          : fromBlock + CHUNK_SIZE;
-
-      try {
-        const tokens = await sdk.getTokens({ fromBlock, toBlock });
-        for (const token of tokens) {
-          const block = token.blockNumber ?? BigInt(0);
-          allTokens.push({
-            address: token.tokenAddress,
-            name: token.tokenName,
-            symbol: token.tokenSymbol,
-            image: token.tokenImage,
-            creator: token.msgSender,
-            deployTimestamp: block.toString(),
-            _block: block,
-          });
-        }
-      } catch (error) {
-        console.error(
-          `Error reading blocks ${fromBlock}-${toBlock}:`,
-          error
-        );
-      }
-
-      fromBlock = toBlock + BigInt(1);
-    }
-
-    // Sort by block number (newest first)
-    allTokens.sort((a, b) => Number(b._block - a._block));
-
-    // Get timestamp for the first token's block (as reference)
-    const firstBlock = allTokens.length > 0 ? Number(allTokens[0]._block) : Number(currentBlock);
+    // Get current block timestamp for age calculation
     const currentTimestamp = await getBlockTimestamp(Number(currentBlock));
-    const firstTimestamp = await getBlockTimestamp(firstBlock);
 
-    // Convert block numbers to timestamps
-    if (currentTimestamp && firstTimestamp) {
-      for (const token of allTokens) {
-        const blockDiff = Number(currentBlock) - Number(token._block);
-        const timestamp = currentTimestamp - (blockDiff * 2);
-        token.deployTimestamp = timestamp.toString();
+    // Convert to response format with timestamps
+    const tokensWithTime: TokenListItem[] = allTokens.map((token) => {
+      let deployTimestamp = token.blockNumber.toString();
+
+      if (currentTimestamp) {
+        const blockDiff = Number(currentBlock) - Number(token.blockNumber);
+        deployTimestamp = (currentTimestamp - blockDiff * 2).toString();
       }
-    }
+
+      return {
+        address: token.address,
+        name: token.name,
+        symbol: token.symbol,
+        image: token.image,
+        creator: token.creator,
+        deployTimestamp,
+      };
+    });
 
     // Paginate
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
-    const paginatedTokens = allTokens.slice(startIndex, endIndex);
-
-    // Remove _block from response
-    const responseData = paginatedTokens.map(({ _block, ...rest }) => rest);
+    const paginatedTokens = tokensWithTime.slice(startIndex, endIndex);
 
     const result: PaginatedResponse<TokenListItem> = {
-      data: responseData,
-      total: allTokens.length,
+      data: paginatedTokens,
+      total: tokensWithTime.length,
       page,
       pageSize,
-      hasMore: endIndex < allTokens.length,
+      hasMore: endIndex < tokensWithTime.length,
     };
 
-    setCache(cacheKey, result);
+    setCache(cacheKey, result, CACHE_TTL);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Tokens API error:", error);

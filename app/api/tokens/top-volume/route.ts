@@ -1,24 +1,12 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { LiquidSDK } from "liquid-sdk";
+import { scanAllTokens } from "@/lib/scanner";
 import { getCached, setCache } from "@/lib/cache";
 import { getTokenPrice } from "@/lib/geckoterminal";
 import type { TopVolumeToken } from "@/lib/types";
 
-const CACHE_TTL = 60 * 1000; // 1 minute
-const DEPLOY_BLOCK = BigInt(43327823);
-const CHUNK_SIZE = BigInt(100000);
-const BATCH_SIZE = 5; // GeckoTerminal requests per batch
-const BATCH_DELAY = 2000; // 2s between batches to respect rate limit
-
-function createSDK() {
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-  });
-  return new LiquidSDK({ publicClient });
-}
+const CACHE_TTL = 5 * 60 * 1000;
+const BATCH_SIZE = 5;
+const BATCH_DELAY = 2000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,51 +20,9 @@ export async function GET() {
       return NextResponse.json(cached);
     }
 
-    const sdk = createSDK();
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-    });
-    const currentBlock = await publicClient.getBlockNumber();
+    const allTokens = await scanAllTokens();
 
-    // Scan all tokens
-    const allTokens: {
-      address: string;
-      name: string;
-      symbol: string;
-      image: string;
-      creator: string;
-      deployTimestamp: string;
-    }[] = [];
-
-    let fromBlock = DEPLOY_BLOCK;
-    while (fromBlock < currentBlock) {
-      const toBlock =
-        fromBlock + CHUNK_SIZE > currentBlock
-          ? currentBlock
-          : fromBlock + CHUNK_SIZE;
-
-      try {
-        const tokens = await sdk.getTokens({ fromBlock, toBlock });
-        for (const token of tokens) {
-          const block = token.blockNumber ?? BigInt(0);
-          allTokens.push({
-            address: token.tokenAddress,
-            name: token.tokenName,
-            symbol: token.tokenSymbol,
-            image: token.tokenImage,
-            creator: token.msgSender,
-            deployTimestamp: block.toString(),
-          });
-        }
-      } catch (error) {
-        console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
-      }
-
-      fromBlock = toBlock + BigInt(1);
-    }
-
-    // Fetch price data from GeckoTerminal in batches (rate limit: 30/min)
+    // Fetch price data from GeckoTerminal in batches
     const tokensWithPrice: TopVolumeToken[] = [];
 
     for (let i = 0; i < allTokens.length; i += BATCH_SIZE) {
@@ -92,7 +38,12 @@ export async function GET() {
           result.status === "fulfilled" && result.value ? result.value : null;
 
         tokensWithPrice.push({
-          ...token,
+          address: token.address,
+          name: token.name,
+          symbol: token.symbol,
+          image: token.image,
+          creator: token.creator,
+          deployTimestamp: token.blockNumber.toString(),
           price: price?.price ?? 0,
           priceChange24h: price?.priceChange24h ?? 0,
           marketCap: price?.marketCap ?? 0,
@@ -101,7 +52,6 @@ export async function GET() {
         });
       }
 
-      // Rate limit: wait between batches
       if (i + BATCH_SIZE < allTokens.length) {
         await sleep(BATCH_DELAY);
       }
@@ -113,7 +63,7 @@ export async function GET() {
     // Return top 50
     const top50 = tokensWithPrice.slice(0, 50);
 
-    setCache(cacheKey, top50);
+    setCache(cacheKey, top50, CACHE_TTL);
     return NextResponse.json(top50);
   } catch (error) {
     console.error("Top volume API error:", error);

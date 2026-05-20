@@ -6,7 +6,7 @@ import { getCached, setCache } from "@/lib/cache";
 import { getBlockTimestamp } from "@/lib/basescan";
 import type { TokenInfo } from "@/lib/types";
 
-const CACHE_TTL = 30 * 1000; // 30 seconds
+const CACHE_TTL = 5 * 60 * 1000;
 
 function createSDK() {
   const publicClient = createPublicClient({
@@ -37,21 +37,17 @@ export async function GET(
     }
 
     const sdk = createSDK();
-
-    // Get token event from SDK (uses indexed event log — O(1))
     const tokenEvent = await sdk.getTokenEvent(addr as `0x${string}`);
 
     if (!tokenEvent) {
       return NextResponse.json({ error: "Token not found" }, { status: 404 });
     }
 
-    // Get additional info
-    const [tokenInfo, rewards] = await Promise.all([
-      sdk.getTokenInfo(addr as `0x${string}`),
-      sdk.getTokenRewards(addr as `0x${string}`).catch(() => null),
-    ]);
+    const rewards = await sdk
+      .getTokenRewards(addr as `0x${string}`)
+      .catch(() => null);
 
-    // Get actual timestamp from block number
+    // Get actual timestamp
     const blockNumber = Number(tokenEvent.blockNumber ?? 0);
     let deployTimestamp = blockNumber.toString();
 
@@ -62,7 +58,7 @@ export async function GET(
       }
     }
 
-    const tokenResult = {
+    const tokenResult: TokenInfo = {
       name: tokenEvent.tokenName,
       symbol: tokenEvent.tokenSymbol,
       image: tokenEvent.tokenImage,
@@ -77,7 +73,7 @@ export async function GET(
       extensions: [],
     };
 
-    setCache(cacheKey, tokenResult);
+    setCache(cacheKey, tokenResult, CACHE_TTL);
     return NextResponse.json(tokenResult);
   } catch (error) {
     console.error("Token detail API error:", error);

@@ -1,24 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { LiquidSDK } from "liquid-sdk";
+import { NextResponse } from "next/server";
+import { scanAllTokens, getPublicClient, DEPLOY_BLOCK } from "@/lib/scanner";
 import { getCached, setCache } from "@/lib/cache";
-import type { AuctionState } from "@/lib/types";
 import { AUCTION_ABI, ADDRESSES } from "@/lib/liquid";
+import type { AuctionState } from "@/lib/types";
 
-const CACHE_TTL = 5 * 1000; // 5 seconds for real-time data
-const DEPLOY_BLOCK = BigInt(43327823);
-const CHUNK_SIZE = BigInt(100000);
+const CACHE_TTL = 10 * 1000; // 10 seconds for real-time data
 
-function createSDK() {
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-  });
-  return new LiquidSDK({ publicClient });
-}
-
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const cacheKey = "auctions_active";
     const cached = getCached<AuctionState[]>(cacheKey, CACHE_TTL);
@@ -26,43 +14,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    const sdk = createSDK();
-    const publicClient = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL || "https://mainnet.base.org"),
-    });
+    const allTokens = await scanAllTokens();
+    const publicClient = getPublicClient();
     const currentBlock = await publicClient.getBlockNumber();
 
-    // Get tokens using SDK (event-based, fast)
-    const allTokens: { poolId: string; name: string; symbol: string }[] = [];
-    let fromBlock = DEPLOY_BLOCK;
-
-    while (fromBlock < currentBlock) {
-      const toBlock =
-        fromBlock + CHUNK_SIZE > currentBlock
-          ? currentBlock
-          : fromBlock + CHUNK_SIZE;
-
-      try {
-        const tokens = await sdk.getTokens({ fromBlock, toBlock });
-        for (const token of tokens) {
-          allTokens.push({
-            poolId: token.poolId,
-            name: token.tokenName,
-            symbol: token.tokenSymbol,
-          });
-        }
-      } catch (error) {
-        console.error(`Error reading blocks ${fromBlock}-${toBlock}:`, error);
-      }
-
-      fromBlock = toBlock + BigInt(1);
-    }
-
-    // Check auction state for each token's pool
+    // Check auction state for each token's pool (last 100 tokens to keep it fast)
+    const recentTokens = allTokens.slice(0, 100);
     const auctions: AuctionState[] = [];
 
-    for (const token of allTokens) {
+    for (const token of recentTokens) {
       try {
         const result = await publicClient.readContract({
           address: ADDRESSES.SNIPER_AUCTION as `0x${string}`,
@@ -85,7 +45,7 @@ export async function GET(request: NextRequest) {
           auctions.push({
             round: Number(round),
             gasPeg,
-            currentFee: Number(currentFee) / 10000, // Convert from basis points
+            currentFee: Number(currentFee) / 10000,
             nextBlock: Number(nextBlock),
             status: isActive ? "active" : isEnded ? "ended" : "upcoming",
           });
@@ -95,14 +55,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Sort by status (active first, then ended)
+    // Sort by status (active first)
     auctions.sort((a, b) => {
       if (a.status === "active" && b.status !== "active") return -1;
       if (a.status !== "active" && b.status === "active") return 1;
       return b.round - a.round;
     });
 
-    setCache(cacheKey, auctions);
+    setCache(cacheKey, auctions, CACHE_TTL);
     return NextResponse.json(auctions);
   } catch (error) {
     console.error("Auctions API error:", error);
