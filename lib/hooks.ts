@@ -5,6 +5,8 @@ import type {
   TokenPrice,
   AuctionState,
   AuctionDetail,
+  TopVolumeToken,
+  PoolListItem,
   PaginatedResponse,
 } from "./types";
 
@@ -83,6 +85,34 @@ export function useAuctionDetail(poolId: string | undefined) {
     isLoading,
     isError: error,
     mutate,
+  };
+}
+
+export function useTopVolume() {
+  const { data, error, isLoading } = useSWR<TopVolumeToken[]>(
+    "/api/tokens/top-volume",
+    fetcher,
+    { refreshInterval: 60000 }
+  );
+
+  return {
+    tokens: data || [],
+    isLoading,
+    isError: error,
+  };
+}
+
+export function usePools() {
+  const { data, error, isLoading } = useSWR<PoolListItem[]>(
+    "/api/pools",
+    fetcher,
+    { refreshInterval: 60000 }
+  );
+
+  return {
+    pools: data || [],
+    isLoading,
+    isError: error,
   };
 }
 

@@ -1,15 +1,11 @@
 "use client";
 
-import { useTokens } from "@/lib/hooks";
+import { useTopVolume } from "@/lib/hooks";
 import Link from "next/link";
+import Loading from "@/components/Loading";
 
 export default function TopVolumePage() {
-  const { tokens, isLoading } = useTokens(1, 100);
-
-  // Sort by deploy timestamp for now (will be volume when GeckoTerminal integration is complete)
-  const sortedTokens = [...tokens].sort(
-    (a, b) => Number(b.deployTimestamp) - Number(a.deployTimestamp)
-  );
+  const { tokens, isLoading } = useTopVolume();
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -21,10 +17,10 @@ export default function TopVolumePage() {
       </div>
 
       {isLoading ? (
-        <div className="animate-pulse space-y-4">
-          {[...Array(20)].map((_, i) => (
-            <div key={i} className="h-16 bg-gray-800 rounded-lg" />
-          ))}
+        <Loading text="Loading volume data..." />
+      ) : tokens.length === 0 ? (
+        <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+          <p className="text-gray-400 text-lg">No volume data available</p>
         </div>
       ) : (
         <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
@@ -53,7 +49,7 @@ export default function TopVolumePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
-                {sortedTokens.map((token, index) => (
+                {tokens.map((token, index) => (
                   <tr
                     key={token.address}
                     className="hover:bg-gray-750 transition-colors"
@@ -84,13 +80,25 @@ export default function TopVolumePage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-sm text-white">-</span>
+                      <span className="text-sm text-white">
+                        {token.volume24h > 0
+                          ? `$${token.volume24h.toLocaleString()}`
+                          : "-"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-sm text-white">-</span>
+                      <span className="text-sm text-white">
+                        {token.price > 0
+                          ? `$${token.price.toFixed(6)}`
+                          : "-"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <span className="text-sm text-white">-</span>
+                      <span className="text-sm text-white">
+                        {token.marketCap > 0
+                          ? `$${token.marketCap.toLocaleString()}`
+                          : "-"}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -99,12 +107,6 @@ export default function TopVolumePage() {
           </div>
         </div>
       )}
-
-      <div className="mt-6 text-center">
-        <p className="text-sm text-gray-400">
-          Volume data from GeckoTerminal (coming soon)
-        </p>
-      </div>
     </div>
   );
 }

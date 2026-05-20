@@ -75,6 +75,34 @@ export interface DashboardStats {
   activeAuctions: number;
 }
 
+export interface TopVolumeToken {
+  address: string;
+  name: string;
+  symbol: string;
+  image: string;
+  creator: string;
+  deployTimestamp: string;
+  price: number;
+  priceChange24h: number;
+  marketCap: number;
+  volume24h: number;
+  liquidity: number;
+}
+
+export interface PoolListItem {
+  address: string;
+  name: string;
+  symbol: string;
+  image: string;
+  poolId: string;
+  hook: string;
+  creator: string;
+  deployTimestamp: string;
+  liquidity: number;
+  volume24h: number;
+  priceChange24h: number;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   total: number;
